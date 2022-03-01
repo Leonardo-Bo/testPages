@@ -5,7 +5,7 @@ output:
   pdf_document: default
 ---
 
-Come esempio di funzionamento di `Rmarkdown` proviamo a riscrivere gli esempi presenti nelle prime 28 pagine delle dispense. Questo vuol dire che le formule e i contenuti avranno meno spazio, ma ci si può comunque fare un'idea delle potenzialità di questo strumento.
+Come dimostrazione del funzionamento di `Rmarkdown` proviamo a riscrivere un paio di esempi presenti nelle prime 28 pagine delle dispense. Questo vuol dire che le formule e i contenuti avranno meno spazio, ma ci si può comunque fare un'idea delle potenzialità di questo strumento.
 
 # Esempio 1
 
@@ -38,11 +38,15 @@ plot(density(samp), xlim=c(0,1), ylim=c(0,2), col="red")
 
 Come possiamo vedere va leggermente ritoccato modificando il titolo e il label dell'asse $x$. Aggiungo un altro paio di commenti, pur consapevole che si tratta di un esempio *semplice*: 
 
-1. usare `par` può rivelarsi *pericoloso*, perché se ce ne sono diversi nel testo e ci si dimentica come si è settato l'output, può essere difficile andarlo a ritrovare;
+1. usare `par` può rivelarsi *pericoloso*, perché se ce ne sono diversi nel testo e ci si dimentica come si è settato l'output, può essere difficile andarlo a ritrovare; un altro problema nell'usare `par` è rappresentato dalle trame *raddoppiate* che rendono il nero ancor più nero.
 
-2. `plot` consente di fare grafici con una certa rapidità, ma la qualità di default non è elevata. Un altro problema nell'usare `par` è rappresentato dalle trame *raddoppiate* che rendono il nero ancor più nero.
+2. `plot` consente di fare grafici con una certa rapidità, ma la qualità di default non è elevata.
 
-Entrambi i problemi possono essere risolti con `ggplot2`. Certo, c'è un prezzo da pagare, ovvero dover organizzare i dati prima di rappresentarli. Tuttavia quello che all'inizio può sembrare difficile, porta a quello che forse è il punto più importante nella programmazione scientifica: dimestichezza nel maneggiare e ordinare dati. 
+Entrambi i problemi possono essere risolti con sia con `plot` che con `ggplot2`. Certo, in entrambi i casi c'è un prezzo da pagare: 
+
+- con `plot` si devono usare una serie di *trucchi* grafici che possono complicarsi molto anche per plot non troppo articolati; 
+
+- con `ggplot2` si devono organizzare i dati prima di rappresentarli. Tuttavia quello che all'inizio può sembrare difficile, porta a quello che forse è il punto più importante nella programmazione scientifica: abilità nel maneggiare e ordinare dati. 
 
 Vediamo come rappresentare i dati precedenti con `ggplot2`:
 
@@ -71,108 +75,216 @@ ggplot(df_exapmle1) +
   geom_density(aes(values, color = type))
 ```
 
-# Esempio 4
-Sul secondo e terzo esempio non ho commenti (media, deviazione standard, mediana). Vediamo invece un approccio diveso per l'esempio 4
+# Esempio 7
+Ho scelto questo esempio perché si presta bene al doppio approccio `R-base` - `tidyverse`. Ovviamente il codice fa ciò che deve in entrambi i casi e questo è l'importante. 
 
 ```{r}
 library(bio3d)
-
-pdb_aus <- read.pdb("1nca")
+pdb_aus <- read.pdb("5T0O")
 df_coord <- pdb_aus$atom
+df_coord <-
+df_coord[!df_coord$resid%in%unique(df_coord$resid)[length(unique(df_coord$resid))],]
 
 # setting parameters
 cutoff <- 12
+df_coord$NewResName <- paste(df_coord$resno, df_coord$resid, df_coord$chain, sep="_")
 
-# antibody atom selection
-df_coord_Ab <- df_coord[df_coord$chain == "H" | df_coord$chain == "L",]
+# centroid calculation
+newResName <- unique(df_coord$NewResName)
+df_centroidCoord <- data.frame()
+for(i in 1:length(newResName)){
+res_aus <- newResName[i]
+df_coord_aus <- df_coord[df_coord$NewResName %in% res_aus, ]
+coord_aus <- apply(df_coord_aus[,c("x","y","z")],2,mean)
+df_centroidCoord <- as.matrix(rbind(df_centroidCoord,coord_aus))
+}
 
-# Selecting only c-alpha atoms
-df_coord_ca <- df_coord_Ab[df_coord_Ab$elety=="CA",]
-df_coord_ca_xyz <- df_coord_ca[,c("x","y","z")]
-head(df_coord_ca)
-
+df_centroidCoord <- apply(df_centroidCoord,2,as.numeric)
+df_centroidCoord <- as.data.frame(df_centroidCoord)
+rownames(df_centroidCoord) <- newResName
 # contacts matrix definition
-DistMat <- as.matrix(dist(df_coord_ca_xyz))
-DistMat_Bin <- DistMat
-DistMat_Bin[DistMat_Bin <= cutoff] <- 1
-DistMat_Bin[DistMat_Bin > cutoff] <- 0
-image(DistMat_Bin)
-DistMat_Bin[lower.tri(DistMat_Bin, diag = FALSE)] <- 0
-diag(DistMat_Bin) <- 0
-image(DistMat_Bin)
+DistMat <- as.matrix(dist(df_centroidCoord))
+vet_aa_inter <- c()
+for(i in 1:nrow(DistMat)){
+rownames_aus <- rownames(DistMat)[i]
+aa_aus <- unlist(strsplit(rownames_aus,"_"))[2]
+aa_int_aus <- names(DistMat[i,][DistMat[i,] <= cutoff & DistMat[i,]!=0])
+aa_int_aus_aus <-as.character(do.call(rbind,strsplit(aa_int_aus,"_"))[,2])
+vet_aa_inter <- c(vet_aa_inter, paste(aa_aus,aa_int_aus_aus, sep="-"))
+}
+summary_conct <- table(vet_aa_inter)
+summary_conct_prob <- summary_conct/sum(summary_conct)
 
-# conctacts vector
-contacts <- apply(DistMat_Bin,2,sum)
-
-# plot
-plot(contacts, pch=20, cex=1.2, xlab="Residue number", ylab="Number of contacts",
-cex.lab=1.4, cex.axis=1.4, col="black")
-lines(contacts, col="blue", lwd=1.4)
-
-# absolute frequencies
-absF <- table(contacts)
-absF
-
-# relative frequencies
-relF <- round(table(contacts)/sum(table(contacts)),4)
-relF
-sum(relF)
+head(summary_conct)
+head(summary_conct_prob)
 ```
 
-Proviamo a riscrivere questo esempio sfruttando al meglio le potenzialità di `R`, in particolare dell'universo di pacchetti `tidyverse`:
+L'esempio continua ma mi fermo qui.  
+Proviamo a riscrivere tutto utilizzando le potenzialità dei pacchetti dell'universo `tidyverse`:
 
 ```{r}
-library(tidyverse)
-library(bio3d)
+pdb_aus <- read.pdb("5T0O")
 
-# pdb_aus <- read.pdb("1nca")
-df_coord <- pdb_aus$atom
-
-# setting parameters
-cutoff <- 12
-
-# coordinates CA
-df_coord_ca <- df_coord %>% 
-  filter(chain == "H" | chain == "L") %>%   # antibody atom selection 
-  filter(elety == "CA") %>%                 # filter row only c-alpha atoms
-  select(x:z) %>%                           # select column x, y, z
-  mutate(index = 1:n())
-
-head(df_coord_ca)
-
-# contacts matrix definition
-df_dist <- df_coord_ca %>% 
-  full_join(x = ., y = ., by = character(), suffix = c("", "_2")) %>% 
-  mutate(distance = sqrt((x - x_2)^2 + (y - y_2)^2 + (z - z_2)^2), 
-         contact = if_else(distance < cutoff, 1, 0)) 
-
-
-head(df_dist)
-
-ggplot(df_dist) +
-  geom_tile(aes(x = index, y = index_2, fill = contact))
-
-
-# conctacts plot
-df_dist %>% 
-  group_by(index) %>% 
-  summarise(number_contacts = sum(contact)) %>% 
-  ggplot(aes(index, number_contacts)) + 
-  geom_line(color = "steelblue3") + 
-  geom_point(color = "steelblue4", size = 0.8) + 
-  labs(x = "Residue number", y = "Number of contacts")
+df_aa_contact <- pdb_aus$atom %>% 
+  # filter only aminoacids
+  filter(resid %in% aa.table$aa3) %>% 
   
-# absolute frequencies
-df_dist %>% 
-  group_by(index) %>% 
-  summarise(number_contacts = sum(contact)) %>%
-  group_by(number_contacts) %>% 
-  summarise(absF = sum(number_contacts))
-# absF <- table(contacts)
-# 
-# # relative frequencies
-# relF <- round(table(contacts)/sum(table(contacts)),4)
-# sum(relF)
+  # add NewResName column
+  mutate(NewResName = paste(resno, resid, chain, sep = "_")) %>% 
+  
+  # group by NewResName
+  group_by(NewResName) %>% 
+  
+  # for each group defined below apply mean function on x y and z column: define centroids
+  summarise(cx = mean(x), cy = mean(y), cz = mean(z)) %>% 
+  
+  # create all pair-wise of centroids
+  full_join(x = ., y = ., by = character(), suffix = c("", "_2")) %>%
+  
+  # remove pair-wise same centroids
+  filter(NewResName != NewResName_2) %>%
+  
+  # add new column distance. Now we have NewResName, cx, cy, cz, NewResName_2, cx_2, cy_2, cz_2, distance
+  mutate(distance = sqrt((cx - cx_2)^2 + (cy - cy_2)^2 + (cz - cz_2)^2)) %>%
+  
+  # get only NewResName, NewResName_2, distance columns
+  select(NewResName, NewResName_2, distance) %>%
+  
+  # get new dataframe wit pair_aa column (es ALA-ALA, ALA-ARG) and contact column based on cutoff
+  summarise(
+    pair_aa = paste(substr(NewResName, nchar(NewResName) - 4, nchar(NewResName) - 2), 
+                    substr(NewResName_2, nchar(NewResName_2) - 4, nchar(NewResName_2) - 2), 
+                    sep = "-"), 
+    contact = if_else(distance < cutoff, 1, 0)
+  ) %>%
+  
+  # group by pair_aa
+  group_by(pair_aa) %>%
+  
+  # get new dataframe with pair_aa and contacts count for each pair
+  summarise(count = sum(contact)) %>%
+  
+  # add frequence
+  mutate(freq = count/sum(count))
+
+head(df_aa_contact)
+```
+- `mutate`: aggiunge colonne al dataframe in esame
+- `summarise`: riassume i dati del dataframe in esame in un nuovo dataframe
+- `filter`: filtra le righe del dataframe in base a condizioni
+- `selec`: seleziona colonne del dataframe
+
+È interessante come con questo approccio il flusso sia sempre da sinistra a destra. Partiamo da un dataframe `X`, lo diamo in pasto a un'operazione tramite la pipe `%>%` e otteniamo un dataframe modificato `X'` (o nuovo dataframe `Y`) da dare in pasto a un'altra operazione. 
+
+Di tutto il codice precedente a mio parere due righe sono abbastanza *oscure*: 
+
+- `full_join`, che fa una magia. Ma tutte le funzioni fanno una magia quando non si conoscono. 
+- la definizione di `pair_aa`. Ma in tutti i linguaggi di programmazione che conosco, non ce n'è uno dove le stringhe non siano un problema. In questo caso vogliamo passare da `"1_ALA_A"` della colonna `NewResName` e `"2_ARG_B"` della colonna `NewResName_2` a `ALA-ARG` della colonna `pair_aa`. 
+
+Notiamo che i due approcci restituiscono gli stessi risultati, ma organizzati diversamente: 
+
+- due vettori nel primo caso
+- un dataframe nel secondo
+
+Concludiamo con un banchmark
+
+```{r, echo=FALSE}
+app1 <- function() {
+  df_coord <- pdb_aus$atom
+  df_coord <-
+  df_coord[!df_coord$resid%in%unique(df_coord$resid)[length(unique(df_coord$resid))],]
+  
+  # setting parameters
+  cutoff <- 12
+  df_coord$NewResName <- paste(df_coord$resno, df_coord$resid, df_coord$chain, sep="_")
+  
+  # centroid calculation
+  newResName <- unique(df_coord$NewResName)
+  df_centroidCoord <- data.frame()
+  for(i in 1:length(newResName)){
+  res_aus <- newResName[i]
+  df_coord_aus <- df_coord[df_coord$NewResName %in% res_aus, ]
+  coord_aus <- apply(df_coord_aus[,c("x","y","z")],2,mean)
+  df_centroidCoord <- as.matrix(rbind(df_centroidCoord,coord_aus))
+  }
+  
+  df_centroidCoord <- apply(df_centroidCoord,2,as.numeric)
+  df_centroidCoord <- as.data.frame(df_centroidCoord)
+  rownames(df_centroidCoord) <- newResName
+  # contacts matrix definition
+  DistMat <- as.matrix(dist(df_centroidCoord))
+  vet_aa_inter <- c()
+  for(i in 1:nrow(DistMat)){
+  rownames_aus <- rownames(DistMat)[i]
+  aa_aus <- unlist(strsplit(rownames_aus,"_"))[2]
+  aa_int_aus <- names(DistMat[i,][DistMat[i,] <= cutoff & DistMat[i,]!=0])
+  aa_int_aus_aus <-as.character(do.call(rbind,strsplit(aa_int_aus,"_"))[,2])
+  vet_aa_inter <- c(vet_aa_inter, paste(aa_aus,aa_int_aus_aus, sep="-"))
+  }
+  summary_conct <- table(vet_aa_inter)
+  summary_conct_prob <- summary_conct/sum(summary_conct)
+  
+  head(summary_conct)
+  head(summary_conct_prob)
+}
+
+app2 <- function() {
+  
+  df_aa_contact <- pdb_aus$atom %>% 
+    # filter only aminoacids
+    filter(resid %in% aa.table$aa3) %>% 
+    
+    # add NewResName column
+    mutate(NewResName = paste(resno, resid, chain, sep = "_")) %>% 
+    
+    # group by NewResName
+    group_by(NewResName) %>% 
+    
+    # for each group defined below apply mean function on x y and z column: define centroids
+    summarise(cx = mean(x), cy = mean(y), cz = mean(z)) %>% 
+    
+    # create all pair-wise of centroids
+    full_join(x = ., y = ., by = character(), suffix = c("", "_2")) %>%
+    
+    # remove pair-wise same centroids
+    filter(NewResName != NewResName_2) %>%
+    
+    # add new column distance. Now we have NewResName, cx, cy, cz, NewResName_2, cx_2, cy_2, cz_2, distance
+    mutate(distance = sqrt((cx - cx_2)^2 + (cy - cy_2)^2 + (cz - cz_2)^2)) %>%
+    
+    # get only NewResName, NewResName_2, distance columns
+    select(NewResName, NewResName_2, distance) %>%
+    
+    # get new dataframe wit pair_aa column (es ALA-ALA, ALA-ARG) and contact column based on cutoff
+    summarise(
+      pair_aa = paste(substr(NewResName, nchar(NewResName) - 4, nchar(NewResName) - 2), 
+                      substr(NewResName_2, nchar(NewResName_2) - 4, nchar(NewResName_2) - 2), 
+                      sep = "-"), 
+      contact = if_else(distance < cutoff, 1, 0)
+    ) %>%
+    
+    # group by pair_aa
+    group_by(pair_aa) %>%
+    
+    # get new dataframe with pair_aa and contacts count for each pair
+    summarise(count = sum(contact)) %>%
+    
+    # add frequence
+    mutate(freq = count/sum(count))
+  }
 ```
 
-A differenza dell'approccio precedente, questo consente di lavorare esclusivamente con dataframe (tibble) evitando le matrici. I dataframe sono strutture più orientate a `R` rispetto alle matrici.
+```{r, message=FALSE, warning=FALSE}
+bm <- bench::mark(app1 = app1(), app2 = app2(), check = FALSE)
+```
+
+```{r}
+bm %>% 
+  select(c("expression", "min", "median", "itr/sec", "mem_alloc", "total_time"))
+```
+
+A causa di un bug non vediamo i nomi delle funzioni, ma il primo approccio risulta essere un po' più rapido del secondo. Tuttavia la memoria allocata è ben oltre il doppio. Inoltre, nel secondo approccio la maggior parte del tempo viene utilizzata per creare la colonna `pair_aa`... vuol dire che molto probabilmente non sono bravo a trattare le stringhe con `tidyverse`.
+
+Ad ogni modo i pacchetti dell'universo `tidyverse` nascono per facilitare la scrittura e la comprensione del codice, non per la sua ottimizzazione. Questo vuol dire che buone pratiche di programmazione in `R-base` eguagliano o addirittura superano le prestazioni di `tidyverse`; tuttavia in `R-base` le buone pratiche bisogna conoscerle, mentre `tidyverse` per come è strutturato ti indirizza automaticamente verso le sue buone pratiche.
+
+Nota finale: per prestazioni ottimali esistono altri pacchetti, di cui il più famoso e probabilmente il migliore è `data.table`. Forse `data.table` e `ggplot2` sono i migliori pacchetti in assoluto dell'universo `R`.
