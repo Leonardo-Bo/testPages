@@ -5,7 +5,7 @@ output:
   pdf_document: default
 ---
 
-Come esempio di funzionamento di `Rmarkdown` proviamo a riscrivere un paio di esempi presenti nelle prime 28 pagine delle dispense. Questo vuol dire che le formule e i contenuti avranno meno spazio, ma ci si può comunque fare un'idea delle potenzialità di questo strumento.
+Come dimostrazione del funzionamento di `Rmarkdown` proviamo a riscrivere un paio di esempi presenti nelle prime 28 pagine delle dispense. Questo vuol dire che le formule e i contenuti avranno meno spazio, ma ci si può comunque fare un'idea delle potenzialità di questo strumento.
 
 # Esempio 1
 
@@ -38,15 +38,15 @@ plot(density(samp), xlim=c(0,1), ylim=c(0,2), col="red")
 
 Come possiamo vedere va leggermente ritoccato modificando il titolo e il label dell'asse $x$. Aggiungo un altro paio di commenti, pur consapevole che si tratta di un esempio *semplice*: 
 
-1. usare `par` può rivelarsi *pericoloso*, perché se ce ne sono diversi nel testo e ci si dimentica come si è settato l'output, può essere difficile andarlo a ritrovare;
+1. usare `par` può rivelarsi *pericoloso*, perché se ce ne sono diversi nel testo e ci si dimentica come si è settato l'output, può essere difficile andarlo a ritrovare; un altro problema nell'usare `par` è rappresentato dalle trame *raddoppiate* che rendono il nero ancor più nero.
 
-2. `plot` consente di fare grafici con una certa rapidità, ma la qualità di default non è elevata. Un altro problema nell'usare `par` è rappresentato dalle trame *raddoppiate* che rendono il nero ancor più nero.
+2. `plot` consente di fare grafici con una certa rapidità, ma la qualità di default non è elevata.
 
 Entrambi i problemi possono essere risolti con sia con `plot` che con `ggplot2`. Certo, in entrambi i casi c'è un prezzo da pagare: 
 
-- con `plot` si devono usare una serie di *trucchi* grafici che possono complicarsi molto anche per plot non estremamente difficili; 
+- con `plot` si devono usare una serie di *trucchi* grafici che possono complicarsi molto anche per plot non troppo articolati; 
 
-- con `ggplot2` si devono organizzare i dati prima di rappresentarli. Tuttavia quello che all'inizio può sembrare difficile, porta a quello che forse è il punto più importante nella programmazione scientifica: dimestichezza nel maneggiare e ordinare dati. 
+- con `ggplot2` si devono organizzare i dati prima di rappresentarli. Tuttavia quello che all'inizio può sembrare difficile, porta a quello che forse è il punto più importante nella programmazione scientifica: abilità nel maneggiare e ordinare dati. 
 
 Vediamo come rappresentare i dati precedenti con `ggplot2`:
 
@@ -169,15 +169,16 @@ df_aa_contact <- pdb_aus$atom %>%
 
 head(df_aa_contact)
 ```
-`mutate`: aggiunge colonne al dataframe in esame
-`summarise`: riassume i dati del dataframe in esame in un nuovo dataframe
-`filter`: filtra le righe del dataframe in base a condizioni
-`selec`: seleziona colonne del dataframe
+- `mutate`: aggiunge colonne al dataframe in esame
+- `summarise`: riassume i dati del dataframe in esame in un nuovo dataframe
+- `filter`: filtra le righe del dataframe in base a condizioni
+- `selec`: seleziona colonne del dataframe
 
-È interessante come con questo approccio il flusso sia sempre da sinistra a destra. Partiamo da un dataframe `X`, lo diamo in pasto a un'operazione tramite la pipe `%>%` e otteniamo un nuovo dataframe da dare in pasto a un'altra operazione. 
+È interessante come con questo approccio il flusso sia sempre da sinistra a destra. Partiamo da un dataframe `X`, lo diamo in pasto a un'operazione tramite la pipe `%>%` e otteniamo un dataframe modificato `X'` (o nuovo dataframe `Y`) da dare in pasto a un'altra operazione. 
 
 Di tutto il codice precedente a mio parere due righe sono abbastanza *oscure*: 
-- `full_join`, che fa una magia
+
+- `full_join`, che fa una magia. Ma tutte le funzioni fanno una magia quando non si conoscono. 
 - la definizione di `pair_aa`. Ma in tutti i linguaggi di programmazione che conosco, non ce n'è uno dove le stringhe non siano un problema. In questo caso vogliamo passare da `"1_ALA_A"` della colonna `NewResName` e `"2_ARG_B"` della colonna `NewResName_2` a `ALA-ARG` della colonna `pair_aa`. 
 
 Notiamo che i due approcci restituiscono gli stessi risultati, ma organizzati diversamente: 
