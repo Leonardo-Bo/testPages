@@ -1,28 +1,178 @@
 ---
-title: "index"
-output: html_document
+title: "Esempio di applicazione di R Markdown (R Notebook)"
+output:
+  html_notebook: default
+  pdf_document: default
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+Come esempio di funzionamento di `Rmarkdown` proviamo a riscrivere gli esempi presenti nelle prime 28 pagine delle dispense. Questo vuol dire che le formule e i contenuti avranno meno spazio, ma ci si può comunque fare un'idea delle potenzialità di questo strumento.
+
+# Esempio 1
+
+Il primo esempio nella sua versione originale è:
+
+```{r}
+# reproducibility
+set.seed(1)
+
+size_pop = 1000
+size_samp <- 100
+
+# defining the population randomly
+pop <- runif(size_pop, min = 0, max = 1)
+
+# Simple random sampling
+samp_cont <- sample(length(pop),size_samp)
+samp <- pop[samp_cont]
+plot(density(pop), xlim=c(0,1), ylim=c(0,2), col="blue")
+par(new=T)
+plot(density(samp), xlim=c(0,1), ylim=c(0,2), col="red")
+
+# Systematic sampling
+samp_cont <- seq(from = 1, to = size_pop, by = 10)
+samp <- pop[samp_cont]
+plot(density(pop), xlim=c(0,1), ylim=c(0,2), col="blue")
+par(new=T)
+plot(density(samp), xlim=c(0,1), ylim=c(0,2), col="red")
 ```
 
-## R Markdown
+Come possiamo vedere va leggermente ritoccato modificando il titolo e il label dell'asse $x$. Aggiungo un altro paio di commenti, pur consapevole che si tratta di un esempio *semplice*: 
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+1. usare `par` può rivelarsi *pericoloso*, perché se ce ne sono diversi nel testo e ci si dimentica come si è settato l'output, può essere difficile andarlo a ritrovare;
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+2. `plot` consente di fare grafici con una certa rapidità, ma la qualità di default non è elevata. Un altro problema nell'usare `par` è rappresentato dalle trame *raddoppiate* che rendono il nero ancor più nero.
 
-```{r cars}
-summary(cars)
+Entrambi i problemi possono essere risolti con `ggplot2`. Certo, c'è un prezzo da pagare, ovvero dover organizzare i dati prima di rappresentarli. Tuttavia quello che all'inizio può sembrare difficile, porta a quello che forse è il punto più importante nella programmazione scientifica: dimestichezza nel maneggiare e ordinare dati. 
+
+Vediamo come rappresentare i dati precedenti con `ggplot2`:
+
+```{r}
+library(ggplot2)
+
+# reproducibility
+set.seed(1)
+
+size_pop = 1000
+size_samp <- 100
+
+# defining the population randomly
+pop <- runif(size_pop, min = 0, max = 1)
+
+# Simple random sampling
+samp_cont <- sample(length(pop),size_samp)
+samp <- pop[samp_cont]
+
+df_exapmle1 <- data.frame(
+  values = c(pop, samp), 
+  type = c(rep("population", length(pop)), rep("sample", length(samp)))
+)
+
+ggplot(df_exapmle1) + 
+  geom_density(aes(values, color = type))
 ```
 
-## Including Plots
+# Esempio 4
+Sul secondo e terzo esempio non ho commenti (media, deviazione standard, mediana). Vediamo invece un approccio diveso per l'esempio 4
 
-You can also embed plots, for example:
+```{r}
+library(bio3d)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+pdb_aus <- read.pdb("1nca")
+df_coord <- pdb_aus$atom
+
+# setting parameters
+cutoff <- 12
+
+# antibody atom selection
+df_coord_Ab <- df_coord[df_coord$chain == "H" | df_coord$chain == "L",]
+
+# Selecting only c-alpha atoms
+df_coord_ca <- df_coord_Ab[df_coord_Ab$elety=="CA",]
+df_coord_ca_xyz <- df_coord_ca[,c("x","y","z")]
+head(df_coord_ca)
+
+# contacts matrix definition
+DistMat <- as.matrix(dist(df_coord_ca_xyz))
+DistMat_Bin <- DistMat
+DistMat_Bin[DistMat_Bin <= cutoff] <- 1
+DistMat_Bin[DistMat_Bin > cutoff] <- 0
+image(DistMat_Bin)
+DistMat_Bin[lower.tri(DistMat_Bin, diag = FALSE)] <- 0
+diag(DistMat_Bin) <- 0
+image(DistMat_Bin)
+
+# conctacts vector
+contacts <- apply(DistMat_Bin,2,sum)
+
+# plot
+plot(contacts, pch=20, cex=1.2, xlab="Residue number", ylab="Number of contacts",
+cex.lab=1.4, cex.axis=1.4, col="black")
+lines(contacts, col="blue", lwd=1.4)
+
+# absolute frequencies
+absF <- table(contacts)
+absF
+
+# relative frequencies
+relF <- round(table(contacts)/sum(table(contacts)),4)
+relF
+sum(relF)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Proviamo a riscrivere questo esempio sfruttando al meglio le potenzialità di `R`, in particolare dell'universo di pacchetti `tidyverse`:
+
+```{r}
+library(tidyverse)
+library(bio3d)
+
+# pdb_aus <- read.pdb("1nca")
+df_coord <- pdb_aus$atom
+
+# setting parameters
+cutoff <- 12
+
+# coordinates CA
+df_coord_ca <- df_coord %>% 
+  filter(chain == "H" | chain == "L") %>%   # antibody atom selection 
+  filter(elety == "CA") %>%                 # filter row only c-alpha atoms
+  select(x:z) %>%                           # select column x, y, z
+  mutate(index = 1:n())
+
+head(df_coord_ca)
+
+# contacts matrix definition
+df_dist <- df_coord_ca %>% 
+  full_join(x = ., y = ., by = character(), suffix = c("", "_2")) %>% 
+  mutate(distance = sqrt((x - x_2)^2 + (y - y_2)^2 + (z - z_2)^2), 
+         contact = if_else(distance < cutoff, 1, 0)) 
+
+
+head(df_dist)
+
+ggplot(df_dist) +
+  geom_tile(aes(x = index, y = index_2, fill = contact))
+
+
+# conctacts plot
+df_dist %>% 
+  group_by(index) %>% 
+  summarise(number_contacts = sum(contact)) %>% 
+  ggplot(aes(index, number_contacts)) + 
+  geom_line(color = "steelblue3") + 
+  geom_point(color = "steelblue4", size = 0.8) + 
+  labs(x = "Residue number", y = "Number of contacts")
+  
+# absolute frequencies
+df_dist %>% 
+  group_by(index) %>% 
+  summarise(number_contacts = sum(contact)) %>%
+  group_by(number_contacts) %>% 
+  summarise(absF = sum(number_contacts))
+# absF <- table(contacts)
+# 
+# # relative frequencies
+# relF <- round(table(contacts)/sum(table(contacts)),4)
+# sum(relF)
+```
+
+A differenza dell'approccio precedente, questo consente di lavorare esclusivamente con dataframe (tibble) evitando le matrici. I dataframe sono strutture più orientate a `R` rispetto alle matrici.
